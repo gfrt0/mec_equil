@@ -56,7 +56,7 @@ gradients <- function(ab) {
     m_y - exp(- b / temp) - colSums(exp((Phi_x_y - a - b)/(2*temp))))
 }
 
-result <- stats::optim(runif(nbx + nby), fxy_ChooSiow, method = "BFGS", gr = gradients)
+result <- stats::optim(par = rep(0, nbx + nby), fn = fxy_ChooSiow, method = "BFGS", gr = gradients)
 
 a <- result$par[1:nbx]
 b <- result$par[nbx+1:nby]
@@ -66,7 +66,7 @@ mu_x_0
 mu_0_y = exp(- b / temp)
 mu_0_y
 
-# fundamental differences in the $b$ estimates by Alfred and mine.
+# fundamental differences in the estimates by Alfred and mine.
 
 mu_x_y = exp((Phi_x_y - a - b)/(2*temp))
 
@@ -77,15 +77,12 @@ B = sum(sum(gamma_x_y * mu_x_y))
 
 # In this case we work with Gauss Seidel iteration in closed form
 
-IPFP <- function(Phi_x_y, tol1 = 1e-12, tol2 = 1e-12) {
-  # initialise. py = - by; px = ax
-  ax = - temp * log(n_x)
-  by = Inf * m_y
+IPFP <- function(Phi_x_y, tol1 = 1e-12, tol2 = 1e-5) {
+
+  K_x_y = exp((Phi_x_y)/(2*temp))
   
-  K_x_y = temp * exp((Phi_x_y)/(2*temp))
-  
-  A_x = exp(- ax / (2*temp))
-  B_y = exp(- by / (2*temp))
+  A_x = rep(1, nbx)
+  B_y = rep(1, nby)
   
   i = 1
   
@@ -93,12 +90,13 @@ IPFP <- function(Phi_x_y, tol1 = 1e-12, tol2 = 1e-12) {
   
   time <- microbenchmark::microbenchmark(
   while (converge1 > tol1 || converge2 > tol2) {
-    B_y_ = sqrt(m_y + (colSums(K_x_y * A_x)/2)^2) - colSums(K_x_y * A_x)/2
-    A_x_ = sqrt(n_x + (rowSums(K_x_y * B_y)/2)^2) - rowSums(K_x_y * B_y)/2
-    converge1 = max(abs(A_x_ - A_x))
-    converge2 = max(abs(B_y_ - B_y))
-    B_y = B_y_
+    A_x_ = sqrt(n_x + ((K_x_y %*% B_y)/2)^2) - (K_x_y %*% B_y)/2
+    B_y_ = sqrt(m_y + ((t(K_x_y) %*% A_x)/2)^2) - (t(K_x_y) %*% A_x)/2
+    converge1 = max(abs(c(A_x_ - A_x, B_y_ - B_y)))
     A_x = A_x_
+    B_y = B_y_
+    converge2 = max(c(abs(n_x - A_x^2 - (K_x_y %*% B_y) * A_x),
+                      abs(m_y - B_y^2 - t(K_x_y) %*% A_x * B_y)))
     i = i + 1
   }, times = 1)
   
@@ -106,8 +104,10 @@ IPFP <- function(Phi_x_y, tol1 = 1e-12, tol2 = 1e-12) {
   cat("Discrepancy for A_x:", converge1, "\n")
   cat("Discrepancy for B_y:", converge2, "\n")
   
-  return(list('mu_x0' = A_x^2, 'mu_0y' = B_y^2))
+  return(list('mu_x0' = as.vector(A_x^2), 'mu_0y' = as.vector(B_y^2), 'convertols' = c(converge1, converge2)))
 }
+
+IPFP(Phi_x_y)
 
 # Linear Taxes
 
